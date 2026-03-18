@@ -1,0 +1,46 @@
+# {{ inventory_hostname }} (LXC {{ lxc_id }})
+
+> {{ description }}
+> *Last audited: {{ ansible_date_time.date }}*
+
+## System
+
+| Property | Value |
+|----------|-------|
+| OS | {{ ansible_distribution }} {{ ansible_distribution_version }} |
+| Kernel | {{ ansible_kernel }} |
+| CPU cores | {{ ansible_processor_vcpus }} |
+| Total RAM | {{ ansible_memtotal_mb }} MB |
+| Free RAM | {{ ansible_memfree_mb }} MB |
+| Uptime | {{ ansible_uptime_seconds | int // 3600 }}h {{ (ansible_uptime_seconds | int % 3600) // 60 }}m |
+
+## Disk Usage
+```
+{{ disk_usage.stdout }}
+```
+
+## Memory
+```
+{{ memory_info.stdout }}
+```
+
+## Running Services
+
+{% for service in running_services.stdout_lines %}
+- `{{ service }}`
+{% endfor %}
+
+## Docker Containers
+
+{% if docker_containers.stdout == "docker_not_installed" or docker_containers.stdout == "" %}
+*Docker is not installed on this host.*
+{% else %}
+| Name | Image | Status |
+|------|-------|--------|
+{% for line in docker_containers.stdout_lines %}
+{% if '|' in line %}
+{% set parts = line.split('|') %}
+| `{{ parts[0] }}` | `{{ parts[1] }}` | {{ parts[2] }} |
+{% endif %}
+{% endfor %}
+{% endif %}

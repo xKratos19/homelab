@@ -1,0 +1,6 @@
+---
+- name: Install node_exporter on all LXC containers
+  hosts: all
+  gather_facts: false
+  roles:
+    - role: ../roles/node_exporter

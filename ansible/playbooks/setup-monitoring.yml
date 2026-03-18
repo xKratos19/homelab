@@ -1,0 +1,6 @@
+---
+- name: Setup Prometheus + Grafana on monitoring LXC
+  hosts: observability
+  gather_facts: true
+  roles:
+    - role: ../roles/monitoring

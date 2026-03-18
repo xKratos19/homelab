@@ -1,0 +1,65 @@
+---
+- name: Check if node_exporter is already installed
+  ansible.builtin.stat:
+    path: /opt/node_exporter/node_exporter
+  register: node_exporter_binary
+
+- name: Create node_exporter system user
+  ansible.builtin.user:
+    name: node_exporter
+    shell: /sbin/nologin
+    system: true
+    create_home: false
+  when: not node_exporter_binary.stat.exists
+
+- name: Create install directory
+  ansible.builtin.file:
+    path: /opt/node_exporter
+    state: directory
+    owner: node_exporter
+    mode: "0755"
+
+- name: Download node_exporter
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-amd64.tar.gz"
+    dest: /tmp/node_exporter.tar.gz
+    mode: "0644"
+  when: not node_exporter_binary.stat.exists
+
+- name: Extract node_exporter
+  ansible.builtin.unarchive:
+    src: /tmp/node_exporter.tar.gz
+    dest: /tmp
+    remote_src: true
+  when: not node_exporter_binary.stat.exists
+
+- name: Copy binary to install directory
+  ansible.builtin.copy:
+    src: /tmp/node_exporter-1.8.2.linux-amd64/node_exporter
+    dest: /opt/node_exporter/node_exporter
+    owner: node_exporter
+    mode: "0755"
+    remote_src: true
+  when: not node_exporter_binary.stat.exists
+  notify: Restart node_exporter
+
+- name: Deploy systemd service
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    mode: "0644"
+  notify: Restart node_exporter
+
+- name: Enable and start node_exporter
+  ansible.builtin.systemd:
+    name: node_exporter
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Verify node_exporter is responding
+  ansible.builtin.uri:
+    url: "http://localhost:9100/metrics"
+    status_code: 200
+  retries: 3
+  delay: 3

@@ -1,0 +1,49 @@
+---
+- name: Gather system facts
+  ansible.builtin.setup:
+    gather_subset:
+      - hardware
+      - network
+      - virtual
+
+- name: Get running systemd services
+  ansible.builtin.shell: |
+    systemctl list-units --type=service --state=running --no-legend | awk '{print $1}'
+  register: running_services
+  changed_when: false
+
+- name: Get Docker containers
+  ansible.builtin.shell: |
+    if command -v docker &>/dev/null 2>&1; then
+      docker ps --format '{% raw %}{{.Names}}|{{.Image}}|{{.Status}}{% endraw %}'
+    else
+      echo "docker_not_installed"
+    fi
+  register: docker_containers
+  changed_when: false
+  failed_when: false
+
+- name: Get disk usage
+  ansible.builtin.shell: |
+    df -h --output=source,size,used,avail,pcent,target | tail -n +2 | grep -v overlay | grep -v tmpfs | grep -v none
+  register: disk_usage
+  changed_when: false
+
+- name: Get memory info
+  ansible.builtin.shell: free -h
+  register: memory_info
+  changed_when: false
+
+- name: Ensure local output directory exists
+  ansible.builtin.file:
+    path: /root/ansible/audit_results
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+
+- name: Write audit report
+  ansible.builtin.template:
+    src: audit_report.j2
+    dest: "/root/ansible/audit_results/{{ inventory_hostname }}.md"
+    mode: "0644"
+  delegate_to: localhost

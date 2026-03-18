@@ -1,0 +1,149 @@
+---
+- name: Install dependencies
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - software-properties-common
+      - wget
+      - curl
+    state: present
+    update_cache: true
+
+# --- Prometheus ---
+- name: Create prometheus user
+  ansible.builtin.user:
+    name: prometheus
+    shell: /sbin/nologin
+    system: true
+    create_home: false
+
+- name: Create prometheus directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: prometheus
+    mode: "0755"
+  loop:
+    - /opt/prometheus
+    - /var/lib/prometheus
+
+- name: Check if prometheus is already installed
+  ansible.builtin.stat:
+    path: /opt/prometheus/prometheus
+  register: prometheus_binary
+
+- name: Download prometheus
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus/prometheus/releases/download/v2.53.0/prometheus-2.53.0.linux-amd64.tar.gz"
+    dest: /tmp/prometheus.tar.gz
+    mode: "0644"
+  when: not prometheus_binary.stat.exists
+
+- name: Extract prometheus
+  ansible.builtin.unarchive:
+    src: /tmp/prometheus.tar.gz
+    dest: /tmp
+    remote_src: true
+  when: not prometheus_binary.stat.exists
+
+- name: Copy prometheus binaries
+  ansible.builtin.copy:
+    src: "/tmp/prometheus-2.53.0.linux-amd64/{{ item }}"
+    dest: "/opt/prometheus/{{ item }}"
+    owner: prometheus
+    mode: "0755"
+    remote_src: true
+  loop:
+    - prometheus
+    - promtool
+  when: not prometheus_binary.stat.exists
+
+- name: Deploy prometheus config
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: /opt/prometheus/prometheus.yml
+    owner: prometheus
+    mode: "0644"
+  notify: Restart prometheus
+
+- name: Deploy prometheus systemd service
+  ansible.builtin.template:
+    src: prometheus.service.j2
+    dest: /etc/systemd/system/prometheus.service
+    mode: "0644"
+  notify: Restart prometheus
+
+- name: Enable and start prometheus
+  ansible.builtin.systemd:
+    name: prometheus
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# --- Grafana ---
+- name: Add Grafana GPG key
+  ansible.builtin.shell: |
+    wget -q -O /usr/share/keyrings/grafana.key https://apt.grafana.com/gpg.key
+  changed_when: false
+
+- name: Add Grafana apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/grafana.key] https://apt.grafana.com stable main"
+    state: present
+    filename: grafana
+
+- name: Install Grafana
+  ansible.builtin.apt:
+    name: grafana
+    state: present
+    update_cache: true
+
+- name: Enable and start Grafana
+  ansible.builtin.systemd:
+    name: grafana-server
+    enabled: true
+    state: started
+
+- name: Verify prometheus is responding
+  ansible.builtin.uri:
+    url: "http://localhost:9090/-/healthy"
+    status_code: 200
+  retries: 5
+  delay: 3
+
+- name: Verify grafana is responding
+  ansible.builtin.uri:
+    url: "http://localhost:3000"
+    status_code: 200
+  retries: 5
+  delay: 3
+
+- name: Create Grafana systemd override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/grafana-server.service.d
+    state: directory
+    mode: "0755"
+
+- name: Deploy Grafana LXC namespace override
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/grafana-server.service.d/override.conf
+    mode: "0644"
+    content: |
+      [Service]
+      PrivateTmp=false
+      PrivateDevices=false
+      ProtectSystem=false
+      ProtectHome=false
+      NoNewPrivileges=false
+      ProtectKernelLogs=false
+      ProtectKernelModules=false
+      ProtectKernelTunables=false
+      ProtectControlGroups=false
+      ProtectClock=false
+      ProtectHostname=false
+      ProtectProc=default
+      RestrictNamespaces=false
+      LockPersonality=false
+      RestrictAddressFamilies=
+      DeviceAllow=
+  notify: Restart grafana
