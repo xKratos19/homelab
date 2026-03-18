@@ -1,0 +1,108 @@
+name: Deploy — apps (LXC 101)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "lxc/101-apps/**"
+
+jobs:
+  detect-changes:
+    name: Detect changed stacks
+    runs-on: [self-hosted, lxc101]
+    outputs:
+      immich: ${{ steps.changes.outputs.immich }}
+      arr: ${{ steps.changes.outputs.arr }}
+      insurance-tracker: ${{ steps.changes.outputs.insurance-tracker }}
+      portfolio: ${{ steps.changes.outputs.portfolio }}
+      wordpress: ${{ steps.changes.outputs.wordpress }}
+      jellystat: ${{ steps.changes.outputs.jellystat }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed stacks
+        id: changes
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          echo "$CHANGED"
+
+          echo "immich=false" >> $GITHUB_OUTPUT
+          echo "arr=false" >> $GITHUB_OUTPUT
+          echo "insurance-tracker=false" >> $GITHUB_OUTPUT
+          echo "portfolio=false" >> $GITHUB_OUTPUT
+          echo "wordpress=false" >> $GITHUB_OUTPUT
+          echo "jellystat=false" >> $GITHUB_OUTPUT
+
+          echo "$CHANGED" | grep -q "lxc/101-apps/immich/"            && echo "immich=true"             >> $GITHUB_OUTPUT || true
+          echo "$CHANGED" | grep -q "lxc/101-apps/arr/"               && echo "arr=true"                >> $GITHUB_OUTPUT || true
+          echo "$CHANGED" | grep -q "lxc/101-apps/insurance-tracker/" && echo "insurance-tracker=true"  >> $GITHUB_OUTPUT || true
+          echo "$CHANGED" | grep -q "lxc/101-apps/portfolio/"         && echo "portfolio=true"          >> $GITHUB_OUTPUT || true
+          echo "$CHANGED" | grep -q "lxc/101-apps/wordpress/"         && echo "wordpress=true"          >> $GITHUB_OUTPUT || true
+          echo "$CHANGED" | grep -q "lxc/101-apps/jellystat/"         && echo "jellystat=true"          >> $GITHUB_OUTPUT || true
+
+  deploy:
+    name: Deploy changed stacks
+    runs-on: [self-hosted, lxc101]
+    needs: detect-changes
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy immich
+        if: needs.detect-changes.outputs.immich == 'true'
+        run: |
+          cp /root/immich/.env /opt/homelab/lxc/101-apps/immich/.env
+          cd /opt/homelab/lxc/101-apps/immich
+          docker compose pull
+          docker compose up -d --remove-orphans
+          echo "immich deployed"
+
+      - name: Deploy arr stack
+        if: needs.detect-changes.outputs.arr == 'true'
+        run: |
+          cp /docker/servarr/.env /opt/homelab/lxc/101-apps/arr/.env 2>/dev/null || true
+          cd /opt/homelab/lxc/101-apps/arr
+          docker compose up -d --remove-orphans
+          echo "arr deployed"
+
+      - name: Deploy insurance-tracker
+        if: needs.detect-changes.outputs.insurance-tracker == 'true'
+        run: |
+          cp /home/insurance-tracker/insurance-tracker/.env /opt/homelab/lxc/101-apps/insurance-tracker/.env 2>/dev/null || true
+          cd /opt/homelab/lxc/101-apps/insurance-tracker
+          docker compose up -d --remove-orphans
+          echo "insurance-tracker deployed"
+
+      - name: Deploy portfolio
+        if: needs.detect-changes.outputs.portfolio == 'true'
+        run: |
+          cd /docker/portofolio_website/portofolio-web
+          docker compose build --no-cache
+          docker compose up -d --remove-orphans
+          echo "portfolio deployed"
+
+      - name: Deploy wordpress
+        if: needs.detect-changes.outputs.wordpress == 'true'
+        run: |
+          cp /docker/wordpress/.env /opt/homelab/lxc/101-apps/wordpress/.env 2>/dev/null || true
+          cd /opt/homelab/lxc/101-apps/wordpress
+          docker compose up -d --remove-orphans
+          echo "wordpress deployed"
+
+      - name: Deploy jellystat
+        if: needs.detect-changes.outputs.jellystat == 'true'
+        run: |
+          cp /root/docker/jellystat/.env /opt/homelab/lxc/101-apps/jellystat/.env 2>/dev/null || true
+          cd /opt/homelab/lxc/101-apps/jellystat
+          docker compose up -d --remove-orphans
+          echo "jellystat deployed"
+
+      - name: Verify running containers
+        run: |
+          docker ps --format 'table {{.Names}}\t{{.Status}}'
