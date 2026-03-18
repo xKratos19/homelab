@@ -1,0 +1,26 @@
+services:
+  jellystat:
+    image: cyfershepard/jellystat
+    container_name: jellystat
+    environment:
+      - JELLYFIN_SERVER=http://192.168.1.135:8096
+      - JELLYFIN_API_KEY=${JELLYFIN_API_KEY}
+      - POSTGRES_USER=jellystat
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_IP=jellystat-db
+      - POSTGRES_PORT=5432
+      - JWT_SECRET=${JWT_SECRET}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  jellystat-db:
+    image: postgres:15
+    container_name: jellystat-db
+    environment:
+      POSTGRES_DB: jellystat
+      POSTGRES_USER: jellystat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - jellystat-data:/var/lib/postgresql/data
+    restart: unless-stopped

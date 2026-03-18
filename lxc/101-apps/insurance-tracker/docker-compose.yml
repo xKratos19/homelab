@@ -1,0 +1,36 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8099:8080"
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - ALERT_SENDER_EMAIL=${ALERT_SENDER_EMAIL}
+      - ALERT_RECEIVER_EMAIL=${ALERT_RECEIVER_EMAIL}
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:6
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+
+  mongo_express:
+    image: mongo-express:1
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      - ME_CONFIG_MONGODB_URL=${MONGO_URI}
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin
+    ports:
+      - "8091:8081"
+
+volumes:
+  mongo_data:

@@ -1,0 +1,7 @@
+services:
+  portfolio:
+    build: .
+    container_name: portfolio
+    ports:
+      - "5173:80"      # or "8080:80" if port 80 is taken
+    restart: unless-stopped
